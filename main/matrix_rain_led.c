@@ -3,6 +3,7 @@
 #include "driver/rmt_tx.h"
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -23,8 +24,11 @@ esp_err_t matrix_rain_led_set(matrix_rain_rgb_t color)
     uint8_t rgb[3] = {color.r, color.g, color.b};
     rmt_transmit_config_t tx_cfg = {.loop_count = 0};
     ESP_RETURN_ON_ERROR(rmt_transmit(s_chan, s_encoder, rgb, sizeof(rgb), &tx_cfg), TAG, "transmit failed");
-    /* Waiting keeps rgb valid for the transfer; updates are rare, so the >50 us latch gap is implicit. */
-    return rmt_tx_wait_all_done(s_chan, 100);
+    /* Waiting keeps rgb valid for the transfer. Then hold the line low for the reset/latch gap
+     * (>50 us, ~280 us on newer WS2812 parts) so a following update is not shifted to a next LED. */
+    ESP_RETURN_ON_ERROR(rmt_tx_wait_all_done(s_chan, 100), TAG, "transmit wait failed");
+    esp_rom_delay_us(300);
+    return ESP_OK;
 }
 
 esp_err_t matrix_rain_led_init(void)
